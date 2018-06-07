@@ -1,0 +1,42 @@
+From 1b2f17f79077f5a8faa7e6d403b3da9d7aacacfb Mon Sep 17 00:00:00 2001
+From: MYEUHD <MYEUHD@protonmail.com>
+Date: Fri, 4 May 2018 06:36:13 +0100
+Subject: [PATCH 1/1] ext4utils: Fix compilation
+
+Change-Id: I36bf7626b826e4faba3c1b92ed8dc704811f0d64
+
+Do not pack relocations, add liblog to libraries and remove
+canned_fs_config.c from the source files.
+---
+ ext4_utils/Android.mk | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/ext4_utils/Android.mk b/ext4_utils/Android.mk
+index 6409a78..bf45aae 100644
+--- a/ext4_utils/Android.mk
++++ b/ext4_utils/Android.mk
+@@ -57,11 +57,12 @@ LOCAL_CFLAGS_linux := -DHOST
+ include $(BUILD_HOST_EXECUTABLE)
+ 
+ include $(CLEAR_VARS)
+-LOCAL_SRC_FILES := make_ext4fs_main.c canned_fs_config.c
++LOCAL_SRC_FILES := make_ext4fs_main.c
+ LOCAL_MODULE := utility_make_ext4fs
+ LOCAL_MODULE_STEM := make_ext4fs
+ LOCAL_MODULE_TAGS := optional
+ LOCAL_FORCE_STATIC_EXECUTABLE := true
++LOCAL_PACK_MODULE_RELOCATIONS := false
+ LOCAL_MODULE_CLASS := UTILITY_EXECUTABLES
+ LOCAL_MODULE_PATH := $(PRODUCT_OUT)/utilities
+ LOCAL_UNSTRIPPED_PATH := $(PRODUCT_OUT)/symbols/utilities
+@@ -71,6 +72,7 @@ LOCAL_STATIC_LIBRARIES += \
+     libmincrypt \
+     libsparse_static \
+     libz \
++    liblog \
+     libcutils \
+     libc
+ 
+-- 
+2.7.4
+

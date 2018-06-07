@@ -1,0 +1,440 @@
+From c4598c6341e23903c3b61e846b6b6e377aafe39a Mon Sep 17 00:00:00 2001
+From: xc-racer99 <xc-racer2@live.ca>
+Date: Thu, 31 May 2018 05:18:56 +0100
+Subject: [PATCH 1/2] bt: Fix compilation for GATT/SMP/LE disabled
+
+Lightly tested, but it compiles, I can pair with a computer,
+and play audio to it
+---
+ Android.mk              |  5 +++++
+ bta/dm/bta_dm_act.c     |  4 ++++
+ btif/src/btif_dm.c      |  6 ++++++
+ btif/src/btif_storage.c |  2 ++
+ stack/btm/btm_acl.c     |  2 ++
+ stack/l2cap/l2c_csm.c   | 22 ++++++++++++++++++++++
+ stack/l2cap/l2c_utils.c |  6 ++++++
+ 7 files changed, 47 insertions(+)
+
+diff --git a/Android.mk b/Android.mk
+index 29760e4..8ab15ee 100644
+--- a/Android.mk
++++ b/Android.mk
+@@ -41,6 +41,11 @@ bluetooth_CFLAGS += \
+   -UNDEBUG \
+   -DLOG_NDEBUG=1
+ 
++# Added for compatability with LE/GATT disabled
++bluetooth_CFLAGS += \
++    -Wno-unused-variable \
++    -Wno-unused-function
++
+ bluetooth_CONLYFLAGS += -std=c99
+ bluetooth_CPPFLAGS :=
+ 
+diff --git a/bta/dm/bta_dm_act.c b/bta/dm/bta_dm_act.c
+index 1bf741d..d92aba8 100644
+--- a/bta/dm/bta_dm_act.c
++++ b/bta/dm/bta_dm_act.c
+@@ -383,7 +383,9 @@ static void bta_dm_sys_hw_cback( tBTA_SYS_HW_EVT status )
+ 
+         /* hw is ready, go on with BTA DM initialization */
+         alarm_free(bta_dm_search_cb.search_timer);
++#if (defined(BTA_GATT_INCLUDED) && (BTA_GATT_INCLUDED == TRUE))
+         alarm_free(bta_dm_search_cb.gatt_close_timer);
++#endif
+         memset(&bta_dm_search_cb, 0, sizeof(bta_dm_search_cb));
+         /*
+          * TODO: Should alarm_free() the bta_dm_search_cb timers during
+@@ -391,8 +393,10 @@ static void bta_dm_sys_hw_cback( tBTA_SYS_HW_EVT status )
+          */
+         bta_dm_search_cb.search_timer =
+           alarm_new("bta_dm_search.search_timer");
++#if (defined(BTA_GATT_INCLUDED) && (BTA_GATT_INCLUDED == TRUE))
+         bta_dm_search_cb.gatt_close_timer =
+           alarm_new("bta_dm_search.gatt_close_timer");
++#endif
+ 
+         memset(&bta_dm_conn_srvcs, 0, sizeof(bta_dm_conn_srvcs));
+         memset(&bta_dm_di_cb, 0, sizeof(tBTA_DM_DI_CB));
+diff --git a/btif/src/btif_dm.c b/btif/src/btif_dm.c
+index f54b642..97f7ef1 100644
+--- a/btif/src/btif_dm.c
++++ b/btif/src/btif_dm.c
+@@ -2401,11 +2401,13 @@ bt_status_t btif_dm_create_bond_out_of_band(const bt_bdaddr_t *bd_addr, int tran
+     if (memcmp(oob_data->le_bt_dev_addr, empty, 7) != 0) {
+         /* byte no 7 is address type in LE Bluetooth Address OOB data */
+         uint8_t address_type = oob_data->le_bt_dev_addr[6];
++#if (defined(BLE_INCLUDED) && (BLE_INCLUDED == TRUE))
+         if (address_type == BLE_ADDR_PUBLIC || address_type == BLE_ADDR_RANDOM) {
+             // bd_addr->address is already reversed, so use it instead of
+             // oob_data->le_bt_dev_addr
+             BTM_SecAddBleDevice(bd_addr->address, NULL, BT_DEVICE_TYPE_BLE, address_type);
+         }
++#endif
+     }
+ 
+     bdstr_t bdstr;
+@@ -2710,8 +2712,10 @@ bt_status_t btif_dm_get_remote_services_by_transport(bt_bdaddr_t *remote_addr, c
+     mask_ext.p_uuid = NULL;
+     mask_ext.srvc_mask = BTA_ALL_SERVICE_MASK;
+ 
++#if ((defined BLE_INCLUDED) && (BLE_INCLUDED == TRUE))
+     BTA_DmDiscoverByTransport(remote_addr->address, &mask_ext,
+                    bte_dm_search_services_evt, TRUE, transport);
++#endif
+ 
+     return BT_STATUS_SUCCESS;
+ }
+@@ -2957,6 +2961,7 @@ BOOLEAN btif_dm_get_smp_config(tBTE_APPL_CFG* p_cfg) {
+     strncpy(conf, recv, 64);
+     conf[63] = 0; // null terminate
+ 
++#if (defined(BLE_INCLUDED) && (BLE_INCLUDED == TRUE))
+     if ((pch = strtok(conf, ",")) != NULL)
+         p_cfg->ble_auth_req = (UINT8) strtoul(pch, &endptr, 16);
+     else
+@@ -2981,6 +2986,7 @@ BOOLEAN btif_dm_get_smp_config(tBTE_APPL_CFG* p_cfg) {
+         p_cfg->ble_max_key_size =  (UINT8) strtoul(pch, &endptr, 16);
+     else
+         return FALSE;
++#endif
+ 
+     return TRUE;
+ }
+diff --git a/btif/src/btif_storage.c b/btif/src/btif_storage.c
+index 83dcc8c..82d95c3 100644
+--- a/btif/src/btif_storage.c
++++ b/btif/src/btif_storage.c
+@@ -502,6 +502,7 @@ static void btif_read_le_key(const uint8_t key_type, const size_t key_len, bt_bd
+     char buffer[100];
+     memset(buffer, 0, sizeof(buffer));
+ 
++#if ((defined BLE_INCLUDED) && (BLE_INCLUDED == TRUE))
+     if (btif_storage_get_ble_bonding_key(&bd_addr, key_type, buffer, key_len) == BT_STATUS_SUCCESS)
+     {
+         if (add_key)
+@@ -523,6 +524,7 @@ static void btif_read_le_key(const uint8_t key_type, const size_t key_len, bt_bd
+ 
+         *key_found = true;
+     }
++#endif
+ }
+ 
+ /*******************************************************************************
+diff --git a/stack/btm/btm_acl.c b/stack/btm/btm_acl.c
+index 4819012..ee13f63 100644
+--- a/stack/btm/btm_acl.c
++++ b/stack/btm/btm_acl.c
+@@ -904,6 +904,7 @@ void btm_use_preferred_conn_params(BD_ADDR bda) {
+     tBTM_SEC_DEV_REC    *p_dev_rec = btm_find_or_alloc_dev (bda);
+ 
+     /* If there are any preferred connection parameters, set them now */
++#if (defined(BTA_GATT_INCLUDED) && (BTA_GATT_INCLUDED == TRUE))
+     if ( (p_dev_rec->conn_params.min_conn_int     >= BTM_BLE_CONN_INT_MIN ) &&
+          (p_dev_rec->conn_params.min_conn_int     <= BTM_BLE_CONN_INT_MAX ) &&
+          (p_dev_rec->conn_params.max_conn_int     >= BTM_BLE_CONN_INT_MIN ) &&
+@@ -933,6 +934,7 @@ void btm_use_preferred_conn_params(BD_ADDR bda) {
+                                            p_dev_rec->conn_params.supervision_tout,
+                                            0, 0);
+     }
++#endif
+ }
+ 
+ /*******************************************************************************
+diff --git a/stack/l2cap/l2c_csm.c b/stack/l2cap/l2c_csm.c
+index dedffc8..1f939d5 100644
+--- a/stack/l2cap/l2c_csm.c
++++ b/stack/l2cap/l2c_csm.c
+@@ -172,8 +172,10 @@ static void l2c_csm_closed (tL2C_CCB *p_ccb, UINT16 event, void *p_data)
+         if (p_ccb->p_lcb->transport == BT_TRANSPORT_LE)
+         {
+             p_ccb->chnl_state = CST_ORIG_W4_SEC_COMP;
++#if ((defined BLE_INCLUDED) && (BLE_INCLUDED == TRUE))
+             l2ble_sec_access_req(p_ccb->p_lcb->remote_bd_addr, p_ccb->p_rcb->psm, TRUE,
+                     &l2c_link_sec_comp, p_ccb);
++#endif
+         }
+         else
+         {
+@@ -198,8 +200,10 @@ static void l2c_csm_closed (tL2C_CCB *p_ccb, UINT16 event, void *p_data)
+         if (p_ccb->p_lcb->transport == BT_TRANSPORT_LE)
+         {
+             p_ccb->chnl_state = CST_ORIG_W4_SEC_COMP;
++#if ((defined BLE_INCLUDED) && (BLE_INCLUDED == TRUE))
+             l2ble_sec_access_req(p_ccb->p_lcb->remote_bd_addr, p_ccb->p_rcb->psm, TRUE,
+                     &l2c_link_sec_comp, p_ccb);
++#endif
+         }
+         else
+         {
+@@ -261,8 +265,10 @@ Event uninit_use_in_call: Using uninitialized value "settings.min" in call to fu
+         if (p_ccb->p_lcb->transport == BT_TRANSPORT_LE)
+         {
+             p_ccb->chnl_state = CST_TERM_W4_SEC_COMP;
++#if ((defined BLE_INCLUDED) && (BLE_INCLUDED == TRUE))
+              l2ble_sec_access_req(p_ccb->p_lcb->remote_bd_addr, p_ccb->p_rcb->psm, FALSE,
+                     &l2c_link_sec_comp, p_ccb);
++#endif
+         }
+         else
+         {
+@@ -360,8 +366,10 @@ static void l2c_csm_orig_w4_sec_comp (tL2C_CCB *p_ccb, UINT16 event, void *p_dat
+     case L2CEVT_LP_CONNECT_CFM:                     /* Link came up         */
+         if (p_ccb->p_lcb->transport == BT_TRANSPORT_LE)
+         {
++#if ((defined BLE_INCLUDED) && (BLE_INCLUDED == TRUE))
+              l2ble_sec_access_req(p_ccb->p_lcb->remote_bd_addr, p_ccb->p_rcb->psm, FALSE,
+                     &l2c_link_sec_comp, p_ccb);
++#endif
+         }
+         else
+         {
+@@ -375,11 +383,13 @@ static void l2c_csm_orig_w4_sec_comp (tL2C_CCB *p_ccb, UINT16 event, void *p_dat
+         p_ccb->chnl_state = CST_W4_L2CAP_CONNECT_RSP;
+         if (p_ccb->p_lcb->transport == BT_TRANSPORT_LE)
+         {
++#if ((defined BLE_INCLUDED) && (BLE_INCLUDED == TRUE))
+             alarm_set_on_queue(p_ccb->l2c_ccb_timer,
+                                L2CAP_CHNL_CONNECT_TIMEOUT_MS,
+                                l2c_ccb_timer_timeout, p_ccb,
+                                btu_general_alarm_queue);
+             l2cble_credit_based_conn_req (p_ccb);          /* Start Connection     */
++#endif
+         }
+         else
+         {
+@@ -514,9 +524,11 @@ static void l2c_csm_term_w4_sec_comp (tL2C_CCB *p_ccb, UINT16 event, void *p_dat
+         }
+         else
+         {
++#if ((defined BLE_INCLUDED) && (BLE_INCLUDED == TRUE))
+             if (p_ccb->p_lcb->transport == BT_TRANSPORT_LE)
+                 l2cu_reject_ble_connection(p_ccb->p_lcb, p_ccb->remote_id, L2CAP_LE_INSUFFICIENT_AUTHENTICATION);
+             else
++#endif
+                 l2cu_send_peer_connect_rsp (p_ccb, L2CAP_CONN_SECURITY_BLOCK, 0);
+             l2cu_release_ccb (p_ccb);
+         }
+@@ -723,6 +735,7 @@ static void l2c_csm_w4_l2ca_connect_rsp (tL2C_CCB *p_ccb, UINT16 event, void *p_
+         p_ci = (tL2C_CONN_INFO *)p_data;
+         if (p_ccb->p_lcb->transport == BT_TRANSPORT_LE)
+         {
++#if ((defined BLE_INCLUDED) && (BLE_INCLUDED == TRUE))
+             /* Result should be OK or Reject */
+             if ((!p_ci) || (p_ci->l2cap_result == L2CAP_CONN_OK))
+             {
+@@ -735,6 +748,7 @@ static void l2c_csm_w4_l2ca_connect_rsp (tL2C_CCB *p_ccb, UINT16 event, void *p_
+                 l2cble_credit_based_conn_res (p_ccb, p_ci->l2cap_result);
+                 l2cu_release_ccb (p_ccb);
+             }
++#endif
+         }
+         else
+         {
+@@ -762,9 +776,11 @@ static void l2c_csm_w4_l2ca_connect_rsp (tL2C_CCB *p_ccb, UINT16 event, void *p_
+ 
+     case L2CEVT_L2CA_CONNECT_RSP_NEG:
+         p_ci = (tL2C_CONN_INFO *)p_data;
++#if ((defined BLE_INCLUDED) && (BLE_INCLUDED == TRUE))
+         if (p_ccb->p_lcb->transport == BT_TRANSPORT_LE)
+             l2cble_credit_based_conn_res (p_ccb, p_ci->l2cap_result);
+         else
++#endif
+             l2cu_send_peer_connect_rsp (p_ccb, p_ci->l2cap_result, p_ci->l2cap_status);
+         l2cu_release_ccb (p_ccb);
+         break;
+@@ -1185,9 +1201,11 @@ static void l2c_csm_open (tL2C_CCB *p_ccb, UINT16 event, void *p_data)
+             }
+         }
+ 
++#if ((defined BLE_INCLUDED) && (BLE_INCLUDED == TRUE))
+         if (p_ccb->p_lcb->transport == BT_TRANSPORT_LE)
+             l2cble_send_peer_disc_req (p_ccb);
+         else
++#endif
+             l2cu_send_peer_disc_req (p_ccb);
+ 
+         p_ccb->chnl_state = CST_W4_L2CAP_DISCONNECT_RSP;
+@@ -1226,7 +1244,9 @@ static void l2c_csm_open (tL2C_CCB *p_ccb, UINT16 event, void *p_data)
+     case L2CEVT_L2CA_SEND_FLOW_CONTROL_CREDIT:
+         L2CAP_TRACE_DEBUG("%s Sending credit",__func__);
+         credit = (UINT16*)p_data;
++#if ((defined BLE_INCLUDED) && (BLE_INCLUDED == TRUE))
+         l2cble_send_flow_control_credit(p_ccb, *credit);
++#endif
+         break;
+ 
+     case L2CEVT_L2CAP_RECV_FLOW_CONTROL_CREDIT:
+@@ -1234,10 +1254,12 @@ static void l2c_csm_open (tL2C_CCB *p_ccb, UINT16 event, void *p_data)
+         L2CAP_TRACE_DEBUG("%s Credits received %d",__func__, *credit);
+         if((p_ccb->peer_conn_cfg.credits + *credit) > L2CAP_LE_MAX_CREDIT)
+         {
++#if ((defined BLE_INCLUDED) && (BLE_INCLUDED == TRUE))
+             /* we have received credits more than max coc credits,
+              * so disconnecting the Le Coc Channel
+              */
+             l2cble_send_peer_disc_req (p_ccb);
++#endif
+         }
+         else
+         {
+diff --git a/stack/l2cap/l2c_utils.c b/stack/l2cap/l2c_utils.c
+index 58ac4b0..d956f1e 100644
+--- a/stack/l2cap/l2c_utils.c
++++ b/stack/l2cap/l2c_utils.c
+@@ -253,6 +253,7 @@ void l2cu_release_lcb (tL2C_LCB *p_lcb)
+         (*p_cb) (L2CAP_PING_RESULT_NO_LINK);
+     }
+ 
++#if ((defined BLE_INCLUDED) && (BLE_INCLUDED == TRUE))
+     /* Check and release all the LE COC connections waiting for security */
+     if (p_lcb->le_sec_pending_q)
+     {
+@@ -266,6 +267,7 @@ void l2cu_release_lcb (tL2C_LCB *p_lcb)
+         fixed_queue_free(p_lcb->le_sec_pending_q, NULL);
+         p_lcb->le_sec_pending_q = NULL;
+     }
++#endif
+ }
+ 
+ 
+@@ -1829,6 +1831,7 @@ tL2C_RCB *l2cu_allocate_rcb (UINT16 psm)
+ *******************************************************************************/
+ tL2C_RCB *l2cu_allocate_ble_rcb (UINT16 psm)
+ {
++#if ((defined BLE_INCLUDED) && (BLE_INCLUDED == TRUE))
+     tL2C_RCB    *p_rcb = &l2cb.ble_rcb_pool[0];
+     UINT16      xx;
+ 
+@@ -1844,6 +1847,7 @@ tL2C_RCB *l2cu_allocate_ble_rcb (UINT16 psm)
+             return (p_rcb);
+         }
+     }
++#endif
+ 
+     /* If here, no free RCB found */
+     return (NULL);
+@@ -1934,6 +1938,7 @@ tL2C_RCB *l2cu_find_rcb_by_psm (UINT16 psm)
+ *******************************************************************************/
+ tL2C_RCB *l2cu_find_ble_rcb_by_psm (UINT16 psm)
+ {
++#if ((defined BLE_INCLUDED) && (BLE_INCLUDED == TRUE))
+     tL2C_RCB    *p_rcb = &l2cb.ble_rcb_pool[0];
+     UINT16      xx;
+ 
+@@ -1942,6 +1947,7 @@ tL2C_RCB *l2cu_find_ble_rcb_by_psm (UINT16 psm)
+         if ((p_rcb->in_use) && (p_rcb->psm == psm))
+             return (p_rcb);
+     }
++#endif
+ 
+     /* If here, no match found */
+     return (NULL);
+-- 
+2.7.4
+
+From b367515e864f5cd75041f4aef2cf116262ed2da1 Mon Sep 17 00:00:00 2001
+From: xc-racer99 <xc-racer2@live.ca>
+Date: Sun, 11 Dec 2016 08:41:17 -0800
+Subject: [PATCH 2/2] Revert "Add BT_HCI_UNKNOWN_MESSAGE_TYPE log event"
+
+Doesn't work on some devices.  Need to if'def this sometime...
+This reverts commit e1c8ed17c7a35510f00997ca329687f73cd193d8.
+---
+ EventLogTags.logtags         |  1 -
+ hci/src/hci_hal_h4.c         |  7 +------
+ hci/test/hci_hal_h4_test.cpp | 25 +++++++++++--------------
+ 3 files changed, 12 insertions(+), 21 deletions(-)
+
+diff --git a/EventLogTags.logtags b/EventLogTags.logtags
+index dc1d239b7..32493d812 100644
+--- a/EventLogTags.logtags
++++ b/EventLogTags.logtags
+@@ -35,4 +35,3 @@
+ 
+ 1010000 bt_hci_timeout (opcode|1)
+ 1010001 bt_config_source (opcode|1)
+-1010002 bt_hci_unknown_type (hci_type|1)
+diff --git a/hci/src/hci_hal_h4.c b/hci/src/hci_hal_h4.c
+index 9c7afe53d..062b6c0a6 100644
+--- a/hci/src/hci_hal_h4.c
++++ b/hci/src/hci_hal_h4.c
+@@ -38,8 +38,6 @@
+ // when streaming time sensitive data (A2DP).
+ #define HCI_THREAD_PRIORITY -19
+ 
+-#define BT_HCI_UNKNOWN_MESSAGE_TYPE_NUM 1010002
+-
+ // Our interface and modules we import
+ static const hci_hal_t interface;
+ static const hci_hal_callbacks_t *callbacks;
+@@ -235,10 +233,7 @@ static void event_uart_has_bytes(eager_reader_t *reader, UNUSED_ATTR void *conte
+       return;
+ 
+     if (type_byte < DATA_TYPE_ACL || type_byte > DATA_TYPE_EVENT) {
+-      LOG_ERROR(LOG_TAG, "%s Unknown HCI message type 0x%x (min=0x%x max=0x%x). Aborting...",
+-                __func__, type_byte, DATA_TYPE_ACL, DATA_TYPE_EVENT);
+-      LOG_EVENT_INT(BT_HCI_UNKNOWN_MESSAGE_TYPE_NUM, type_byte);
+-      assert(false && "Unknown HCI message type");
++      LOG_ERROR(LOG_TAG, "%s Unknown HCI message type. Dropping this byte 0x%x, min %x, max %x", __func__, type_byte, DATA_TYPE_ACL, DATA_TYPE_EVENT);
+       return;
+     }
+ 
+diff --git a/hci/test/hci_hal_h4_test.cpp b/hci/test/hci_hal_h4_test.cpp
+index 1b861a0e7..bf6240519 100644
+--- a/hci/test/hci_hal_h4_test.cpp
++++ b/hci/test/hci_hal_h4_test.cpp
+@@ -192,18 +192,17 @@ static void expect_socket_data(int fd, char first_byte, char *data) {
+   }
+ }
+ 
+-static void write_packet(int fd, char first_byte, const void *data,
+-                         size_t datalen) {
++static void write_packet(int fd, char first_byte, char *data) {
+   write(fd, &first_byte, 1);
+-  write(fd, data, datalen);
++  write(fd, data, strlen(data));
+ }
+ 
+-static void write_packet_reentry(int fd, char first_byte, const void *data,
+-                                 size_t datalen) {
++static void write_packet_reentry(int fd, char first_byte, char *data) {
+   write(fd, &first_byte, 1);
+ 
+-  for (size_t i = 0; i < datalen; i++) {
+-    write(fd, static_cast<const uint8_t *>(data) + i, 1);
++  int length = strlen(data);
++  for (int i = 0; i < length; i++) {
++    write(fd, &data[i], 1);
+     semaphore_wait(reentry_semaphore);
+   }
+ }
+@@ -227,11 +226,10 @@ TEST_F(HciHalH4Test, test_transmit) {
+ TEST_F(HciHalH4Test, test_read_synchronous) {
+   reset_for(read_synchronous);
+ 
+-  write_packet(sockfd[1], DATA_TYPE_ACL, acl_data, strlen(acl_data));
+-  write_packet(sockfd[1], HCI_BLE_EVENT, corrupted_data,
+-               sizeof(corrupted_data));
+-  write_packet(sockfd[1], DATA_TYPE_SCO, sco_data, strlen(sco_data));
+-  write_packet(sockfd[1], DATA_TYPE_EVENT, event_data, strlen(event_data));
++  write_packet(sockfd[1], DATA_TYPE_ACL, acl_data);
++  write_packet(sockfd[1], HCI_BLE_EVENT, corrupted_data);
++  write_packet(sockfd[1], DATA_TYPE_SCO, sco_data);
++  write_packet(sockfd[1], DATA_TYPE_EVENT, event_data);
+ 
+   // Wait for all data to be received before calling the test good
+   semaphore_wait(done);
+@@ -244,8 +242,7 @@ TEST_F(HciHalH4Test, test_read_async_reentry) {
+   reentry_semaphore = semaphore_new(0);
+   reentry_i = 0;
+ 
+-  write_packet_reentry(sockfd[1], DATA_TYPE_ACL, sample_data3,
+-                       strlen(sample_data3));
++  write_packet_reentry(sockfd[1], DATA_TYPE_ACL, sample_data3);
+ 
+   // write_packet_reentry ensures the data has been received
+   semaphore_free(reentry_semaphore);
+-- 
+2.7.4
+

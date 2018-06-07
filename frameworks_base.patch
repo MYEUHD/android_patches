@@ -1,0 +1,117 @@
+From 54c2a467300126bff03838428d63e2706ce4af2e Mon Sep 17 00:00:00 2001
+From: Andrew Sutherland <dr3wsuth3rland@gmail.com>
+Date: Mon, 30 Apr 2018 16:44:02 +0100
+Subject: [PATCH 1/2] allow forcing HighEndGfx mode people have already started
+ flipping the lowRam prop to enable transparent status bar, this will enable
+ it with fewer repercussions.
+
+Add persist.sys.force_highendgfx=true to enable it with enabled lowram.
+---
+ core/java/android/app/ActivityManager.java | 12 ++++++++++--
+ 1 file changed, 10 insertions(+), 2 deletions(-)
+
+diff --git a/core/java/android/app/ActivityManager.java b/core/java/android/app/ActivityManager.java
+index a1b34e6..39fb3b8 100644
+--- a/core/java/android/app/ActivityManager.java
++++ b/core/java/android/app/ActivityManager.java
+@@ -945,8 +945,16 @@ public class ActivityManager {
+      * @hide
+      */
+     static public boolean isHighEndGfx() {
+-        return !isLowRamDeviceStatic() &&
+-                !Resources.getSystem().getBoolean(com.android.internal.R.bool.config_avoidGfxAccel);
++        return (!isLowRamDeviceStatic() &&
++                !Resources.getSystem().getBoolean(com.android.internal.R.bool.config_avoidGfxAccel))
++                || isForcedHighEndGfx();
++    }
++
++    /**
++     * @hide
++     */
++    public static boolean isForcedHighEndGfx() {
++        return SystemProperties.getBoolean("persist.sys.force_highendgfx", false);   
+     }
+ 
+     /**
+-- 
+2.7.4
+
+
+From 55fb2ad10dd396f6113735bf677e105a4bfec2f9 Mon Sep 17 00:00:00 2001
+From: Danny Baumann <dannybaumann@web.de>
+Date: Thu, 7 Jun 2018 17:06:05 +0100
+Subject: [PATCH 2/2] fw/base: allow home button to wake device
+
+Change-Id: Iadd5181ca8b4ade2482424fcd2d98558ec6d7512
+---
+ core/java/android/provider/Settings.java                  |  6 ++++++
+ .../com/android/server/policy/PhoneWindowManager.java     | 15 +++++++++++++++
+ 2 files changed, 21 insertions(+)
+
+diff --git a/core/java/android/provider/Settings.java b/core/java/android/provider/Settings.java
+index 86b496f..ea99fb0 100644
+--- a/core/java/android/provider/Settings.java
++++ b/core/java/android/provider/Settings.java
+@@ -3751,6 +3751,12 @@ public final class Settings {
+         public static final Validator LOCK_TO_APP_ENABLED_VALIDATOR = sBooleanValidator;
+ 
+         /**
++         * Whether to wake the screen with the home key, the value is boolean.
++         * @hide
++         */
++        public static final String HOME_WAKE_SCREEN = "home_wake_screen";
++
++        /**
+          * I am the lolrus.
+          * <p>
+          * Nonzero values indicate that the user has a bukkit.
+diff --git a/services/core/java/com/android/server/policy/PhoneWindowManager.java b/services/core/java/com/android/server/policy/PhoneWindowManager.java
+index 19f3941..ce5a540 100644
+--- a/services/core/java/com/android/server/policy/PhoneWindowManager.java
++++ b/services/core/java/com/android/server/policy/PhoneWindowManager.java
+@@ -503,6 +503,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
+     boolean mTranslucentDecorEnabled = true;
+     boolean mUseTvRouting;
+ 
++    // Behavior of home wake
++    boolean mHomeWakeScreen;
++
+     int mPointerLocationMode = 0; // guarded by mLock
+ 
+     // The last window we were told about in focusChanged.
+@@ -956,6 +959,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
+                     Settings.Global.POLICY_CONTROL), false, this,
+                     UserHandle.USER_ALL);
+             resolver.registerContentObserver(Settings.System.getUriFor(
++                    Settings.System.HOME_WAKE_SCREEN), false, this,
++                    UserHandle.USER_ALL);
++            resolver.registerContentObserver(Settings.System.getUriFor(
+                     Settings.System.GLOBAL_ACTIONS_LIST), false, this,
+                     UserHandle.USER_ALL);
+             resolver.registerContentObserver(Settings.System.getUriFor(
+@@ -2296,6 +2302,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
+                     Settings.Secure.INCALL_BACK_BUTTON_BEHAVIOR_DEFAULT,
+                     UserHandle.USER_CURRENT);
+ 
++            mHomeWakeScreen = (Settings.System.getIntForUser(resolver,
++                    Settings.System.HOME_WAKE_SCREEN, 1, UserHandle.USER_CURRENT) == 1); 
++
+             // Configure wake gesture.
+             boolean wakeGestureEnabledSetting = Settings.Secure.getIntForUser(resolver,
+                     Settings.Secure.WAKE_GESTURE_ENABLED, 0,
+@@ -6446,6 +6455,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
+                 break;
+             }
+ 
++            case KeyEvent.KEYCODE_HOME:
++                if (down && !interactive && mHomeWakeScreen) {
++                    isWakeKey = true;
++                }
++                break;
++
+             case KeyEvent.KEYCODE_ENDCALL: {
+                 result &= ~ACTION_PASS_TO_USER;
+                 if (down) {
+-- 
+2.7.4
+

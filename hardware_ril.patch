@@ -1,0 +1,54 @@
+From 129766b828c68e114f658799141b38af73b244ba Mon Sep 17 00:00:00 2001
+From: xc-racer99 <xc-racer2@live.ca>
+Date: Thu, 22 Sep 2016 10:13:34 -0700
+Subject: [PATCH] rild: Allow RIL_Init to be run before switching to radio user
+
+Some older blobs need this to properly setup their modem.
+---
+ rild/Android.mk | 4 ++++
+ rild/rild.c     | 6 ++++++
+ 2 files changed, 10 insertions(+)
+
+diff --git a/rild/Android.mk b/rild/Android.mk
+index b8de0bd..5564c3f 100644
+--- a/rild/Android.mk
++++ b/rild/Android.mk
+@@ -24,6 +24,10 @@ ifeq ($(SIM_COUNT), 2)
+     LOCAL_CFLAGS += -DANDROID_SIM_COUNT_2
+ endif
+ 
++ifeq ($(TARGET_NEEDS_ROOT_RIL_INIT), true)
++    LOCAL_CFLAGS += -DROOT_RIL_INIT
++endif
++
+ LOCAL_MODULE:= rild
+ LOCAL_MODULE_TAGS := optional
+ LOCAL_INIT_RC := rild.rc
+diff --git a/rild/rild.c b/rild/rild.c
+index ce1adba..c51dd2c 100644
+--- a/rild/rild.c
++++ b/rild/rild.c
+@@ -317,7 +317,9 @@ int main(int argc, char **argv) {
+     }
+ OpenLib:
+ #endif
++#ifndef ROOT_RIL_INIT
+     switchUser();
++#endif
+ 
+     dlHandle = dlopen(rilLibPath, RTLD_NOW);
+ 
+@@ -380,6 +382,10 @@ OpenLib:
+ 
+     RLOGD("RIL_register_socket completed");
+ 
++#ifdef ROOT_RIL_INIT
++    switchUser();
++#endif
++
+ done:
+ 
+     RLOGD("RIL_Init starting sleep loop");
+-- 
+2.11.0
+
