@@ -1,0 +1,78 @@
+From a10de54bfbeda50ce1fb6b4736595c78e7699ffe Mon Sep 17 00:00:00 2001
+From: MYEUHD <MYEUHD@protonmail.com>
+Date: Thu, 27 Dec 2018 05:27:33 +0100
+Subject: [PATCH] products: Add galaxysubi
+
+Change-Id: Ib206d9b8c2d4a0f1c5251170839eeb054786a2f4
+---
+ AndroidProducts.mk        |  1 +
+ products/ua_galaxysubi.mk | 32 ++++++++++++++++++++++++++++++++
+ vendorsetup.sh            |  1 +
+ 3 files changed, 34 insertions(+)
+ create mode 100644 products/ua_galaxysubi.mk
+
+diff --git a/AndroidProducts.mk b/AndroidProducts.mk
+index 4ba02ac..993dcd8 100644
+--- a/AndroidProducts.mk
++++ b/AndroidProducts.mk
+@@ -21,6 +21,7 @@ PRODUCT_MAKEFILES := \
+     $(LOCAL_DIR)/products/ua_flo.mk \
+     $(LOCAL_DIR)/products/ua_flounder.mk \
+     $(LOCAL_DIR)/products/ua_flounder_lte.mk \
++    $(LOCAL_DIR)/products/ua_galaxysubi.mk \
+     $(LOCAL_DIR)/products/ua_grouper.mk \
+     $(LOCAL_DIR)/products/ua_hummingbird.mk \
+     $(LOCAL_DIR)/products/ua_hammerhead.mk \
+diff --git a/products/ua_galaxysubi.mk b/products/ua_galaxysubi.mk
+new file mode 100644
+index 0000000..be6f343
+--- /dev/null
++++ b/products/ua_galaxysubi.mk
+@@ -0,0 +1,32 @@
++# Copyright (C) 2016 Unlegacy Android
++#
++# Licensed under the Apache License, Version 2.0 (the "License");
++# you may not use this file except in compliance with the License.
++# You may obtain a copy of the License at
++#
++#      http://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
++
++# Inherit Unlegacy Android common configuration
++$(call inherit-product, vendor/unlegacy/configs/common.mk)
++
++# Inherit AOSP device configuration
++$(call inherit-product, device/samsung/galaxysubi/aosp_galaxysubi.mk)
++
++PRODUCT_NAME   := ua_galaxysubi
++PRODUCT_DEVICE := galaxysubi
++PRODUCT_BRAND  := Samsung
++PRODUCT_MODEL  := GT-I9000
++PRODUCT_MANUFACTURER := Samsung
++
++# Device build info and fingerprint
++PRODUCT_BUILD_PROP_OVERRIDES += \
++    PRODUCT_NAME=GT-I9000 \
++    TARGET_DEVICE=GT-I9000 \
++    BUILD_FINGERPRINT="samsung/GT-I9000/GT-I9000:2.3.5/GINGERBREAD/XXJVT:user/release-keys" \
++    PRIVATE_BUILD_DESC="GT-I9000-user 2.3.5 GINGERBREAD XXJVT release-keys"
+diff --git a/vendorsetup.sh b/vendorsetup.sh
+index 01b38a6..619013b 100644
+--- a/vendorsetup.sh
++++ b/vendorsetup.sh
+@@ -12,6 +12,7 @@ add_lunch_combo ua_espresso3g-userdebug
+ add_lunch_combo ua_flo-userdebug
+ add_lunch_combo ua_flounder-userdebug
+ add_lunch_combo ua_flounder_lte-userdebug
++add_lunch_combo ua_galaxysubi-userdebug
+ add_lunch_combo ua_grouper-userdebug
+ add_lunch_combo ua_hummingbird-userdebug
+ add_lunch_combo ua_hammerhead-userdebug
+-- 
+2.19.2
+

@@ -1,7 +1,7 @@
 From 55fb37af1d652eeb562861b1af0ab112a3b8c18f Mon Sep 17 00:00:00 2001
 From: Benoit Mauduit <bmauduit@beneth.fr>
 Date: Wed, 22 Jun 2016 15:04:56 +0200
-Subject: [PATCH 1/4] Add signature Spoofing permission
+Subject: [PATCH 1/5] Add signature Spoofing permission
 
 This is needed by GmsCore (https://microg.org/) to pretend
 the existence of the official Play Services to applications calling
@@ -101,7 +101,7 @@ index b6a99408122..445a6daf335 100644
 From 02afc2b09e10b990aab0033042c7d76e44480a07 Mon Sep 17 00:00:00 2001
 From: danielegobbetti <d.gobbetti@peer.biz>
 Date: Thu, 3 Nov 2016 00:22:00 -0700
-Subject: [PATCH 2/4] base: [MicroG] Allow location providers also outside of
+Subject: [PATCH 2/5] base: [MicroG] Allow location providers also outside of
  /system
 
 ---
@@ -126,63 +126,79 @@ index 2ff036be4b4..9141db2d542 100644
 2.11.0
 
 
-From 9c55ff9e9d60ff2a29447684c20c824d394d7065 Mon Sep 17 00:00:00 2001
-From: Dominggoes Isakh <drjisakh@gmail.com>
-Date: Thu, 1 Dec 2016 23:07:57 +0100
-Subject: [PATCH 3/4] ColorFade: fix EGL crash on exynos4 mali blobs
+From 54c2a467300126bff03838428d63e2706ce4af2e Mon Sep 17 00:00:00 2001
+From: Andrew Sutherland <dr3wsuth3rland@gmail.com>
+Date: Mon, 30 Apr 2018 16:44:02 +0100
+Subject: [PATCH 3/5] allow forcing HighEndGfx mode people have already started
+ flipping the lowRam prop to enable transparent status bar, this will enable
+ it with fewer repercussions.
 
-Change-Id: Ic14a3208486cf61a054cb9532d74c5a46d7f784d
+Add persist.sys.force_highendgfx=true to enable it with enabled lowram.
 ---
- services/core/java/com/android/server/display/ColorFade.java | 11 ++++++++++-
- 1 file changed, 10 insertions(+), 1 deletion(-)
+ core/java/android/app/ActivityManager.java | 12 ++++++++++--
+ 1 file changed, 10 insertions(+), 2 deletions(-)
 
-diff --git a/services/core/java/com/android/server/display/ColorFade.java b/services/core/java/com/android/server/display/ColorFade.java
-index a16fcd2fa11..7a5f5231869 100644
---- a/services/core/java/com/android/server/display/ColorFade.java
-+++ b/services/core/java/com/android/server/display/ColorFade.java
-@@ -36,6 +36,7 @@ import android.opengl.EGLDisplay;
- import android.opengl.EGLSurface;
- import android.opengl.GLES20;
- import android.opengl.GLES11Ext;
-+import android.os.SystemProperties;
- import android.util.Slog;
- import android.view.DisplayInfo;
- import android.view.Surface.OutOfResourcesException;
-@@ -70,6 +71,9 @@ final class ColorFade {
-     // See code for details.
-     private static final int DEJANK_FRAMES = 3;
- 
-+    private static final boolean DESTROY_SURFACE_AFTER_DETACH =
-+            SystemProperties.getBoolean("ro.egl.destroy_after_detach", false);
+diff --git a/core/java/android/app/ActivityManager.java b/core/java/android/app/ActivityManager.java
+index a1b34e6..39fb3b8 100644
+--- a/core/java/android/app/ActivityManager.java
++++ b/core/java/android/app/ActivityManager.java
+@@ -945,8 +945,16 @@ public class ActivityManager {
+      * @hide
+      */
+     static public boolean isHighEndGfx() {
+-        return !isLowRamDeviceStatic() &&
+-                !Resources.getSystem().getBoolean(com.android.internal.R.bool.config_avoidGfxAccel);
++        return (!isLowRamDeviceStatic() &&
++                !Resources.getSystem().getBoolean(com.android.internal.R.bool.config_avoidGfxAccel))
++                || isForcedHighEndGfx();
++    }
 +
-     private final int mDisplayId;
++    /**
++     * @hide
++     */
++    public static boolean isForcedHighEndGfx() {
++        return SystemProperties.getBoolean("persist.sys.force_highendgfx", false);   
+     }
  
-     // Set to true when the animation context has been fully prepared.
-@@ -331,10 +335,15 @@ final class ColorFade {
-                 destroyScreenshotTexture();
-                 destroyGLShaders();
-                 destroyGLBuffers();
--                destroyEglSurface();
-+                if (!DESTROY_SURFACE_AFTER_DETACH) {
-+                    destroyEglSurface();
-+                }
-             } finally {
-                 detachEglContext();
-             }
-+            if (DESTROY_SURFACE_AFTER_DETACH) {
-+                destroyEglSurface();
-+            }
-             // This is being called with no active context so shouldn't be
-             // needed but is safer to not change for now.
-             GLES20.glFlush();
+     /**
 -- 
-2.11.0
+2.7.4
+
+
+From 6dbeeb13c3736454497203c6757ea9a8356dd36b Mon Sep 17 00:00:00 2001
+From: D. Andrei Măceș <andrei@unlegacy-android.org>
+Date: Sun, 28 Oct 2018 12:05:50 +0200
+Subject: [PATCH 4/5] wm: Add prop for home button wakeup
+
+Toggle persist.wm.home_wake_screen off to disable waking screen with HW
+key. The existing Settings plumbing is left in place, and would over-
+ride prop should the remaining UI bits be implemented.
+
+Change-Id: Ie06899b2e5433688e9a8f67c50815ede9da40405
+Signed-off-by: D. Andrei Măceș <andrei@unlegacy-android.org>
+---
+
+diff --git a/services/core/java/com/android/server/policy/PhoneWindowManager.java b/services/core/java/com/android/server/policy/PhoneWindowManager.java
+index 872b03d..706483f 100644
+--- a/services/core/java/com/android/server/policy/PhoneWindowManager.java
++++ b/services/core/java/com/android/server/policy/PhoneWindowManager.java
+@@ -2075,7 +2075,9 @@
+                     Settings.Secure.INCALL_BACK_BUTTON_BEHAVIOR_DEFAULT,
+                     UserHandle.USER_CURRENT);
+             mHomeWakeScreen = (Settings.System.getIntForUser(resolver,
+-                    Settings.System.HOME_WAKE_SCREEN, 1, UserHandle.USER_CURRENT) == 1);
++                    Settings.System.HOME_WAKE_SCREEN, SystemProperties.getBoolean(
++                    "persist.wm." + Settings.System.HOME_WAKE_SCREEN,
++                    true) ? 1 : 0, UserHandle.USER_CURRENT) == 1);
+ 
+             // Configure wake gesture.
+             boolean wakeGestureEnabledSetting = Settings.Secure.getIntForUser(resolver,
 
 
 From 0b7e552af6aa6e72bed1d344f81623f2395ef684 Mon Sep 17 00:00:00 2001
 From: xc-racer99 <xc-racer2@live.ca>
 Date: Mon, 4 Dec 2017 11:56:04 -0800
-Subject: [PATCH 4/4] Reduce size of bootanimation
+Subject: [PATCH 5/5] Reduce size of bootanimation
 
 Based on https://review.lineageos.org/#/c/156542/
 
