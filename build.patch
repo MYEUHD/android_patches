@@ -1,0 +1,131 @@
+From b77b0d684bf49dbd5df7e58ba735be1034e93826 Mon Sep 17 00:00:00 2001
+From: Michael Bestas <mikeioannina@gmail.com>
+Date: Wed, 28 Oct 2015 17:09:40 -0700
+Subject: [PATCH 1/2] Revert "Remove mkyaffs2image references."
+
+* Can be enabled on devices that need it with TARGET_USERIMAGES_USE_YAFFS
+---
+ core/Makefile  | 17 +++++++++++++++--
+ core/config.mk |  1 +
+ 2 files changed, 16 insertions(+), 2 deletions(-)
+
+diff --git a/core/Makefile b/core/Makefile
+index d8b4ef89bd..6fb4aee558 100644
+--- a/core/Makefile
++++ b/core/Makefile
+@@ -745,6 +745,9 @@ INTERNAL_USERIMAGES_EXT_VARIANT := ext4
+ endif
+ endif
+ endif
++ifeq ($(TARGET_USERIMAGES_USE_YAFFS),true)
++INTERNAL_USERIMAGES_USE_YAFFS := true
++endif
+ 
+ # These options tell the recovery updater/installer how to mount the partitions writebale.
+ # <fstype>=<fstype_opts>[|<fstype_opts>]...
+@@ -764,6 +767,9 @@ ifeq ($(TARGET_USERIMAGES_USE_F2FS),true)
+ INTERNAL_USERIMAGES_DEPS += $(MKF2FSUSERIMG) $(MAKE_F2FS)
+ endif
+ endif
++ifeq ($(INTERNAL_USERIMAGES_USE_YAFFS),true)
++INTERNAL_USERIMAGES_DEPS += $(MKYAFFS2)
++endif
+ 
+ ifneq (true,$(TARGET_USERIMAGES_SPARSE_SQUASHFS_DISABLED))
+   INTERNAL_USERIMAGES_SPARSE_SQUASHFS_FLAG := -s
+@@ -816,6 +822,7 @@ $(if $(PRODUCTS.$(INTERNAL_PRODUCT).PRODUCT_VENDOR_BASE_FS_PATH),$(hide) echo "v
+ $(if $(BOARD_OEMIMAGE_PARTITION_SIZE),$(hide) echo "oem_size=$(BOARD_OEMIMAGE_PARTITION_SIZE)" >> $(1))
+ $(if $(BOARD_OEMIMAGE_JOURNAL_SIZE),$(hide) echo "oem_journal_size=$(BOARD_OEMIMAGE_JOURNAL_SIZE)" >> $(1))
+ $(if $(BOARD_OEMIMAGE_EXTFS_INODE_COUNT),$(hide) echo "oem_extfs_inode_count=$(BOARD_OEMIMAGE_EXTFS_INODE_COUNT)" >> $(1))
++$(if $(mkyaffs2_extra_flags),$(hide) echo "mkyaffs2_extra_flags=$(mkyaffs2_extra_flags)" >> $(1))
+ $(if $(INTERNAL_USERIMAGES_SPARSE_EXT_FLAG),$(hide) echo "extfs_sparse_flag=$(INTERNAL_USERIMAGES_SPARSE_EXT_FLAG)" >> $(1))
+ $(if $(INTERNAL_USERIMAGES_SPARSE_SQUASHFS_FLAG),$(hide) echo "squashfs_sparse_flag=$(INTERNAL_USERIMAGES_SPARSE_SQUASHFS_FLAG)" >> $(1))
+ $(hide) echo "selinux_fc=$(SELINUX_FC)" >> $(1)
+@@ -1059,11 +1066,16 @@ endif
+ .PHONY: recoveryimage
+ recoveryimage: $(INSTALLED_RECOVERYIMAGE_TARGET) $(RECOVERY_RESOURCE_ZIP)
+ 
+-ifeq ($(BOARD_NAND_PAGE_SIZE),)
++ifneq ($(BOARD_NAND_PAGE_SIZE),)
++mkyaffs2_extra_flags := -c $(BOARD_NAND_PAGE_SIZE)
++else
++mkyaffs2_extra_flags :=
+ BOARD_NAND_PAGE_SIZE := 2048
+ endif
+ 
+-ifeq ($(BOARD_NAND_SPARE_SIZE),)
++ifneq ($(BOARD_NAND_SPARE_SIZE),)
++mkyaffs2_extra_flags += -s $(BOARD_NAND_SPARE_SIZE)
++else
+ BOARD_NAND_SPARE_SIZE := 64
+ endif
+ 
+@@ -1572,6 +1584,7 @@ OTATOOLS :=  $(HOST_OUT_EXECUTABLES)/minigzip \
+   $(HOST_OUT_EXECUTABLES)/mkbootfs \
+   $(HOST_OUT_EXECUTABLES)/mkbootimg \
+   $(HOST_OUT_EXECUTABLES)/fs_config \
++  $(HOST_OUT_EXECUTABLES)/mkyaffs2image \
+   $(HOST_OUT_EXECUTABLES)/zipalign \
+   $(HOST_OUT_EXECUTABLES)/bsdiff \
+   $(HOST_OUT_EXECUTABLES)/imgdiff \
+diff --git a/core/config.mk b/core/config.mk
+index 61520605b6..8b618490a8 100644
+--- a/core/config.mk
++++ b/core/config.mk
+@@ -529,6 +529,7 @@ MKBOOTIMG := $(HOST_OUT_EXECUTABLES)/mkbootimg$(HOST_EXECUTABLE_SUFFIX)
+ else
+ MKBOOTIMG := $(BOARD_CUSTOM_MKBOOTIMG)
+ endif
++MKYAFFS2 := $(HOST_OUT_EXECUTABLES)/mkyaffs2image$(HOST_EXECUTABLE_SUFFIX)
+ APICHECK := $(HOST_OUT_EXECUTABLES)/apicheck$(HOST_EXECUTABLE_SUFFIX)
+ FS_GET_STATS := $(HOST_OUT_EXECUTABLES)/fs_get_stats$(HOST_EXECUTABLE_SUFFIX)
+ MAKE_EXT4FS := $(HOST_OUT_EXECUTABLES)/make_ext4fs$(HOST_EXECUTABLE_SUFFIX)
+-- 
+2.11.0
+
+
+From a6da3f58f36eca977f1b30ee141e2ea4be76fb16 Mon Sep 17 00:00:00 2001
+From: Tom Marshall <tdm@cyngn.com>
+Date: Sat, 22 Nov 2014 08:43:59 -0800
+Subject: [PATCH 2/2] build: Add option to disable block-based ota
+
+While block-based is great when building on a local machine, it kills rsync
+performance when syncing rebuilds from remote machines.  Provide an option
+to disable it for those whose network bandwidth is less than their device's
+emmc bandwidth.
+
+Usage: export BLOCK_BASED_OTA=false
+
+@xc-racer99: Modify for AOSP and don't allow block-based ota's when target uses yaffs images
+---
+ core/Makefile | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/core/Makefile b/core/Makefile
+index 6fb4aee558..ef1d713f5e 100644
+--- a/core/Makefile
++++ b/core/Makefile
+@@ -1953,6 +1953,12 @@ ifeq ($(TARGET_BUILD_TYPE),debug)
+ endif
+ name := $(name)-ota-$(FILE_NAME_TAG)
+ 
++ifneq ($(BLOCK_BASED_OTA),false)
++    ifneq ($(TARGET_USERIMAGES_USE_YAFFS),true)
++        $(INTERNAL_OTA_PACKAGE_TARGET): block_based := --block
++    endif
++endif
++
+ INTERNAL_OTA_PACKAGE_TARGET := $(PRODUCT_OUT)/$(name).zip
+ 
+ $(INTERNAL_OTA_PACKAGE_TARGET): KEY_CERT_PAIR := $(DEFAULT_KEY_CERT_PAIR)
+@@ -1961,7 +1967,7 @@ $(INTERNAL_OTA_PACKAGE_TARGET): $(BUILT_TARGET_FILES_PACKAGE)
+ 	@echo "Package OTA: $@"
+ 	$(hide) PATH=$(foreach p,$(INTERNAL_USERIMAGES_BINARY_PATHS),$(p):)$$PATH MKBOOTIMG=$(MKBOOTIMG) \
+ 	   ./build/tools/releasetools/ota_from_target_files -v \
+-	   --block \
++	   $(block_based) \
+ 	   -p $(HOST_OUT) \
+ 	   -k $(KEY_CERT_PAIR) \
+ 	   $(if $(OEM_OTA_CONFIG), -o $(OEM_OTA_CONFIG)) \
+-- 
+2.11.0
